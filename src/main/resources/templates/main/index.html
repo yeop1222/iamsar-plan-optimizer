@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+
+<div layout:fragment="content">
+
+    <!-- Left Panel -->
+    <aside class="left-panel" id="leftPanel">
+        <div class="tab-buttons">
+            <button class="tab-button active" data-tab="datumTab">
+                <i class="fa-solid fa-location-dot"></i> Datum
+            </button>
+            <button class="tab-button" data-tab="sruTab">
+                <i class="fa-solid fa-ship"></i> SRU
+            </button>
+            <button class="tab-button" data-tab="planTab">
+                <i class="fa-solid fa-magnifying-glass"></i> Plan
+            </button>
+        </div>
+
+        <!-- Tab 1: Datum -->
+        <div class="tab-content active" id="datumTab">
+            <div class="panel-section">
+                <h3>Datum Type</h3>
+                <div class="radio-group">
+                    <label><input type="radio" name="datumType" value="POINT" checked/> Point</label>
+                    <label><input type="radio" name="datumType" value="LINE"/> Line</label>
+                    <label><input type="radio" name="datumType" value="AREA"/> Area</label>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Input Method</h3>
+                <div class="radio-group">
+                    <label><input type="radio" name="inputMethod" value="manual" checked/> Manual</label>
+                    <label><input type="radio" name="inputMethod" value="map"/> Map Click</label>
+                    <label><input type="radio" name="inputMethod" value="bearing"/> Bearing/Dist</label>
+                </div>
+            </div>
+
+            <!-- Manual coordinate input -->
+            <div class="panel-section" id="manualInputSection">
+                <h3>Add Datum Point</h3>
+                <div class="form-row">
+                    <label>Lat:</label>
+                    <input type="number" id="datumLat" step="0.0001" placeholder="35.1"/>
+                </div>
+                <div class="form-row">
+                    <label>Lon:</label>
+                    <input type="number" id="datumLon" step="0.0001" placeholder="129.0"/>
+                </div>
+                <div class="form-row">
+                    <label>Error (NM):</label>
+                    <input type="number" id="datumError" step="0.1" value="3.5" min="0.1"/>
+                </div>
+                <button class="btn-primary" id="addDatumPointBtn">
+                    <i class="fa-solid fa-plus"></i> Add Point
+                </button>
+            </div>
+
+            <!-- Map click info -->
+            <div class="panel-section" id="mapClickSection" style="display:none;">
+                <h3>Map Click</h3>
+                <div class="form-row">
+                    <label>Error (NM):</label>
+                    <input type="number" id="datumErrorMapClick" step="0.1" value="3.5" min="0.1"/>
+                </div>
+                <p class="hint">Click map to place datum point. Auto-stops after 1 click for POINT type.</p>
+            </div>
+
+            <!-- Bearing/Distance input -->
+            <div class="panel-section" id="bearingInputSection" style="display:none;">
+                <h3>From Existing Point</h3>
+                <div class="form-row">
+                    <label>From:</label>
+                    <select id="bearingFromPoint">
+                        <option value="0">Point #1</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Bearing (&deg;):</label>
+                    <input type="number" id="bearingDeg" step="0.1" value="0" min="0" max="360"/>
+                </div>
+                <div class="form-row">
+                    <label>Distance (NM):</label>
+                    <input type="number" id="bearingDistNm" step="0.1" value="5.0" min="0.1"/>
+                </div>
+                <div class="form-row">
+                    <label>Error (NM):</label>
+                    <input type="number" id="bearingError" step="0.1" value="3.5" min="0.1"/>
+                </div>
+                <button class="btn-primary" id="addBearingPointBtn">
+                    <i class="fa-solid fa-plus"></i> Add Point
+                </button>
+                <p class="hint">Requires at least 1 existing datum point.</p>
+            </div>
+
+            <!-- Datum Points list + distance/bearing info -->
+            <div class="panel-section">
+                <h3>Datum Points <span id="datumCountBadge" class="count-badge"></span></h3>
+                <div id="datumPointList" class="item-list"></div>
+                <div id="datumDistInfo" class="datum-dist-info" style="display:none;"></div>
+            </div>
+
+            <div class="panel-section button-row">
+                <button class="btn-primary" id="generateRasterBtn">
+                    <i class="fa-solid fa-layer-group"></i> Generate Raster
+                </button>
+                <button class="btn-secondary" id="resetDatumBtn">
+                    <i class="fa-solid fa-rotate-left"></i> Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab 2: SRU -->
+        <div class="tab-content" id="sruTab">
+
+            <!-- Common Conditions -->
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-cloud-sun"></i> Environment (Common)</h3>
+                <div class="form-row">
+                    <label>Visibility (NM):</label>
+                    <input type="number" id="envVisibility" step="1" value="15" min="1" max="20"/>
+                </div>
+                <div class="form-row">
+                    <label>Wind (kts):</label>
+                    <input type="number" id="envWindSpeed" step="1" value="3"/>
+                </div>
+                <div class="form-row">
+                    <label>Wave (m):</label>
+                    <input type="number" id="envWaveHeight" step="0.1" value="0.5"/>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3><i class="fa-solid fa-crosshairs"></i> Search Object (Common)</h3>
+                <div class="form-row">
+                    <label>Category:</label>
+                    <select id="soCategory">
+                        <option value="PIW">PIW</option>
+                        <option value="RAFT">Raft</option>
+                        <option value="POWERBOAT">Powerboat</option>
+                        <option value="SAILBOAT">Sailboat</option>
+                        <option value="SHIP">Ship</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Size:</label>
+                    <select id="soSize">
+                        <option value="1">1</option>
+                    </select>
+                </div>
+                <button class="btn-primary" id="applyConditionsBtn" style="margin-top:4px;">
+                    <i class="fa-solid fa-check"></i> Apply Conditions
+                </button>
+            </div>
+
+            <!-- SRU List -->
+            <div class="panel-section">
+                <h3>SRU List</h3>
+                <div id="sruList" class="item-list"></div>
+            </div>
+
+            <!-- Add SRU -->
+            <div class="panel-section">
+                <h3>Add SRU</h3>
+                <div class="form-row">
+                    <label>Name:</label>
+                    <input type="text" id="sruName" placeholder="Ship-1"/>
+                </div>
+                <div class="form-row">
+                    <label>Type:</label>
+                    <select id="sruType">
+                        <option value="LARGE">Large (1000t+)</option>
+                        <option value="MEDIUM">Medium (300t+)</option>
+                        <option value="SMALL">Small (&lt;300t)</option>
+                        <option value="BOAT">Boat (Special)</option>
+                        <option value="ROTARY">Rotary Wing</option>
+                        <option value="FIXED">Fixed Wing</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Speed (kts):</label>
+                    <input type="number" id="sruSpeed" step="0.1" value="8.0"/>
+                </div>
+                <div class="form-row">
+                    <label>Search Time (hrs):</label>
+                    <input type="number" id="sruEndurance" step="0.1" value="3.0"/>
+                </div>
+                <div class="form-row" id="altitudeRow" style="display:none;">
+                    <label>Altitude (m):</label>
+                    <select id="sruAltitude">
+                        <option value="150" selected>150</option>
+                        <option value="300">300</option>
+                        <option value="600">600</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Fatigue:</label>
+                    <input type="checkbox" id="sruFatigue"/>
+                </div>
+                <div class="form-divider">or enter directly</div>
+                <div class="form-row">
+                    <label>W_corr (NM):</label>
+                    <input type="number" id="sruWcorr" step="0.1" placeholder="auto"/>
+                </div>
+                <div class="button-row">
+                    <button class="btn-primary" id="addSruBtn">
+                        <i class="fa-solid fa-plus"></i> Register
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Search Plan -->
+        <div class="tab-content" id="planTab">
+            <div class="panel-section">
+                <h3>Search Plan Mode</h3>
+                <div class="mode-buttons">
+                    <button class="mode-button active" data-mode="manual">Manual</button>
+                    <button class="mode-button" data-mode="ga">GA</button>
+                    <button class="mode-button" data-mode="baseline">Baseline</button>
+                </div>
+            </div>
+
+            <!-- Manual mode -->
+            <div class="plan-mode-content active" id="manualMode">
+                <div class="panel-section">
+                    <div class="form-row">
+                        <label>Select SRU:</label>
+                        <select id="manualSruSelect"></select>
+                    </div>
+                    <button class="btn-primary" id="drawSearchAreaBtn">
+                        <i class="fa-solid fa-draw-polygon"></i> Draw Search Area
+                    </button>
+                    <div class="form-row" id="rotationRow" style="margin-top:10px;">
+                        <label>Rotation (&deg;):</label>
+                        <input type="number" id="rotationInput" step="1" value="0" min="0" max="360"/>
+                        <button class="btn-secondary" id="applyRotationBtn" style="padding:5px 10px;">
+                            <i class="fa-solid fa-rotate"></i> Apply
+                        </button>
+                    </div>
+                    <p class="hint">Draw rectangle, then set rotation angle. Click Apply to rotate selected area.</p>
+                </div>
+            </div>
+
+            <!-- GA mode -->
+            <div class="plan-mode-content" id="gaMode">
+                <div class="panel-section">
+                    <h4>GA Parameters</h4>
+                    <div class="form-row">
+                        <label>Population:</label>
+                        <input type="number" id="gaPopulation" value="100"/>
+                    </div>
+                    <div class="form-row">
+                        <label>Generations:</label>
+                        <input type="number" id="gaGenerations" value="500"/>
+                    </div>
+                    <div class="form-row">
+                        <label>Crossover Rate:</label>
+                        <input type="number" id="gaCrossover" step="0.01" value="0.8"/>
+                    </div>
+                    <div class="form-row">
+                        <label>Mutation Rate:</label>
+                        <input type="number" id="gaMutation" step="0.01" value="0.05"/>
+                    </div>
+                    <button class="btn-primary" id="runGaBtn">
+                        <i class="fa-solid fa-rocket"></i> Run Optimization
+                    </button>
+                    <div class="progress-bar-container" id="gaProgressContainer" style="display:none;">
+                        <div class="progress-bar" id="gaProgressBar"></div>
+                        <span class="progress-text" id="gaProgressText">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Baseline mode -->
+            <div class="plan-mode-content" id="baselineMode">
+                <div class="panel-section">
+                    <p class="hint">Only supports POINT datum.</p>
+                    <button class="btn-primary" id="runBaselineBtn">
+                        <i class="fa-solid fa-table-cells"></i> Generate Baseline
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="panel-section" id="resultSection" style="display:none;">
+                <h3>Results</h3>
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>SRU</th>
+                            <th>POC</th>
+                            <th>CF</th>
+                            <th>POD</th>
+                            <th>POS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultTableBody"></tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4"><strong>Total POS</strong></td>
+                            <td id="totalPosValue"><strong>-</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <button class="btn-secondary" id="exportResultBtn" style="margin-top:8px;">
+                    <i class="fa-solid fa-download"></i> Export JSON
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Map -->
+    <div class="map-container" id="mapContainer"></div>
+
+    <!-- Search Area Tooltip -->
+    <div id="searchAreaTooltip" class="search-area-tooltip" style="display:none;">
+        <div class="tooltip-name"></div>
+        <div class="tooltip-area"></div>
+        <div class="tooltip-poc"></div>
+        <div class="tooltip-c"></div>
+        <div class="tooltip-pod"></div>
+        <div class="tooltip-pos"></div>
+    </div>
+
+    <!-- Datum drag tooltip -->
+    <div id="datumDragTooltip" class="datum-drag-tooltip" style="display:none;"></div>
+
+    <!-- Opacity slider + contour toggle -->
+    <div class="opacity-control" id="opacityControl" style="display:none;">
+        <label>POC Opacity</label>
+        <input type="range" id="opacitySlider" min="0" max="1" step="0.05" value="0.6"/>
+        <label style="margin-left:12px;cursor:pointer;">
+            <input type="checkbox" id="contourToggle" checked/> 50%
+        </label>
+    </div>
+
+</div>
+
+<div layout:fragment="scripts">
+    <script type="module" th:src="@{/js/app.js}"></script>
+</div>
+
+</html>

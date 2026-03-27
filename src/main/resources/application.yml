@@ -1,0 +1,15 @@
+server:
+  port: 8080
+  error:
+    include-stacktrace: never
+    include-message: always
+
+spring:
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+
+logging:
+  level:
+    papervalidation: DEBUG
