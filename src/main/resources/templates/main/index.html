@@ -306,8 +306,22 @@
                         </tr>
                     </tfoot>
                 </table>
-                <button class="btn-secondary" id="exportResultBtn" style="margin-top:8px;">
-                    <i class="fa-solid fa-download"></i> Export JSON
+                <div class="button-row" style="margin-top:8px;">
+                    <button class="btn-primary" id="saveResultBtn" style="display:none;">
+                        <i class="fa-solid fa-floppy-disk"></i> Save
+                    </button>
+                    <button class="btn-secondary" id="exportResultBtn">
+                        <i class="fa-solid fa-download"></i> Export JSON
+                    </button>
+                </div>
+            </div>
+
+            <!-- Saved Results -->
+            <div class="panel-section" id="savedResultSection" style="display:none;">
+                <h3>Saved Results <span id="savedCountBadge" class="count-badge"></span></h3>
+                <div id="savedResultList" class="item-list"></div>
+                <button class="btn-secondary" id="importSavedBtn" style="margin-top:8px;">
+                    <i class="fa-solid fa-arrow-down-to-bracket"></i> Import
                 </button>
             </div>
         </div>
