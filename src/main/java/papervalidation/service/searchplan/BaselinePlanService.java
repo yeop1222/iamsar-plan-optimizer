@@ -26,14 +26,14 @@ import java.util.List;
  *
  * Follows the IamsarSearchPlanServiceImpl algorithm:
  *   Step 1: Zta = Σ(W_corr_i × V_i × T_i)
- *   Step 2: Ro = fs × E  (fs from Zr = Zta / E²)
- *   Step 3: Ao — single-point: 4Ro², double-point: 4Ro² + 2Ro×dd
+ *   Step 2: Ro = fs × E  (fs from Zr = Zta / fZ)
+ *   Step 3: Ao — single-point: 4Ro², double-point: 4Ro² + 2Ro×dd, line: 2×Ro×L
  *   Step 4: Co = Zta / Ao  (same C for all SRUs)
  *   Step 5: S_i = W_corr_i / Co, subArea_i = V_i × T_i × S_i
  *   Step 6: Strip tiling, priority-sorted (ROTARY > FIXED > SHIP)
  *   Step 7: Rotation from datum geometry
  *
- * Only POINT datum is supported. LINE/AREA returns error.
+ * Supports POINT and LINE datums. AREA returns error.
  */
 @Service
 public class BaselinePlanService {
@@ -59,8 +59,18 @@ public class BaselinePlanService {
 
         DatumSet datumSet = datumService.get();
         if (datumSet == null) throw new IllegalStateException("No datum set defined");
-        if (datumSet.getType() != DatumType.POINT) {
-            throw new IllegalStateException("IAMSAR Baseline only supports POINT datum");
+        if (datumSet.getType() != DatumType.POINT && datumSet.getType() != DatumType.LINE) {
+            throw new IllegalStateException("IAMSAR Baseline only supports POINT and LINE datums");
+        }
+        if (datumSet.getType() == DatumType.LINE) {
+            if (datumSet.getPoints().size() != 2) {
+                throw new IllegalStateException("LINE datum Baseline requires exactly 2 points");
+            }
+            double e0 = datumSet.getPoints().get(0).getErrorNm();
+            double e1 = datumSet.getPoints().get(1).getErrorNm();
+            if (Math.abs(e0 - e1) > 0.001) {
+                throw new IllegalStateException("LINE datum Baseline requires both points to have the same error (E)");
+            }
         }
         if (datumSet.getPoints() == null || datumSet.getPoints().isEmpty()) {
             throw new IllegalStateException("No datum points defined");
@@ -81,21 +91,39 @@ public class BaselinePlanService {
         // ──────────────────────────────────────────────
         // Step 2: Optimal radius Ro from error E
         // ──────────────────────────────────────────────
+        List<DatumPoint> points = datumSet.getPoints();
+        boolean isLine = datumSet.getType() == DatumType.LINE;
+
         double E = datumSet.getPoints().stream()
                 .mapToDouble(DatumPoint::getErrorNm)
                 .average()
                 .orElse(3.0);
 
-        double fz = E * E;                        // effort factor
-        double Zr = zta / fz;                     // relative effort (dimensionless)
-        double fs = 0.7179 * Math.pow(Zr, 0.2570); // search factor (normal conditions)
-        double Ro = fs * E;                        // optimal radius (NM)
-        log.debug("Baseline Step2: E={} NM, fz={}, Zr={}, fs={}, Ro={} NM", E, fz, Zr, fs, Ro);
+        // LINE datum: compute base line length Lb and datum line length L = Lb + 2E
+        double Lb = 0; // base line length (NM), only for LINE
+        double L = 0;  // datum line length (NM), only for LINE
+        if (isLine && points.size() >= 2) {
+            Lb = VincentyUtils.distance(
+                    points.get(0).getLatitude(), points.get(0).getLongitude(),
+                    points.get(1).getLatitude(), points.get(1).getLongitude()) / 1852.0;
+            L = Lb + 2.0 * E; // both ends extended
+        }
+
+        // Effort factor: POINT → fZ = E², LINE → fZ = E × L
+        double fz = isLine ? E * L : E * E;
+        double Zr = zta / fz;
+
+        // Search factor: POINT → N-5/N-6, LINE → N-7/N-8 (normal conditions)
+        double fs = isLine
+                ? 0.8204 * Math.pow(Zr, 0.3411)   // LINE normal (N-8)
+                : 0.7179 * Math.pow(Zr, 0.2570);   // POINT normal (N-6)
+        double Ro = fs * E;
+        log.debug("Baseline Step2: type={}, E={} NM, Lb={} NM, L={} NM, fz={}, Zr={}, fs={}, Ro={} NM",
+                datumSet.getType(), E, Lb, L, fz, Zr, fs, Ro);
 
         // ──────────────────────────────────────────────
         // Step 3: Optimal area Ao and shape
         // ──────────────────────────────────────────────
-        List<DatumPoint> points = datumSet.getPoints();
         double widthNm;   // cross-track (short side)
         double lengthNm;  // along-track (long side)
         double rotationDeg = 0;
@@ -117,7 +145,21 @@ public class BaselinePlanService {
         double centroidY = sumY / sumP;
         double centroidLat = CoordinateConverter.yToLat(centroidY);
 
-        if (points.size() == 1) {
+        if (isLine) {
+            // LINE datum: Ao = 2 × Ro × L, Width = 2R, Length = (2R) + Lb (both ends extended)
+            widthNm = 2.0 * Ro;
+            lengthNm = 2.0 * Ro + Lb;
+
+            // Rotation: direction from point 0 to point 1
+            DatumPoint pA = points.get(0);
+            DatumPoint pB = points.get(1);
+            double[] mcA = CoordinateConverter.toMercator(pA.getLongitude(), pA.getLatitude());
+            double[] mcB = CoordinateConverter.toMercator(pB.getLongitude(), pB.getLatitude());
+            rotationDeg = Math.toDegrees(Math.atan2(mcB[1] - mcA[1], mcB[0] - mcA[0]));
+
+            log.debug("Baseline Step3 (line): Lb={} NM, L={} NM, width={} NM, length={} NM, rotation={}°",
+                    Lb, L, widthNm, lengthNm, rotationDeg);
+        } else if (points.size() == 1) {
             // Single-point: square
             widthNm = 2.0 * Ro;
             lengthNm = 2.0 * Ro;
@@ -155,7 +197,8 @@ public class BaselinePlanService {
                     dd, widthNm, lengthNm, rotationDeg);
         }
 
-        double Ao = widthNm * lengthNm; // optimal area (NM²)
+        // Optimal area: POINT → widthNm × lengthNm, LINE → 2 × Ro × L
+        double Ao = isLine ? 2.0 * Ro * L : widthNm * lengthNm;
 
         // ──────────────────────────────────────────────
         // Step 4: Optimal Coverage Factor Co (same for all SRUs)
@@ -270,9 +313,11 @@ public class BaselinePlanService {
         result.setSruResults(sruResults);
         result.setAreas(areas);
         result.setMethod("IAMSAR_BASELINE");
-        result.setDescription(String.format(
-                "L-7: E=%.1f NM, Ro=%.2f NM, Ao=%.1f NM², Co=%.3f, dd=%.1f NM",
-                E, Ro, Ao, Co, dd));
+        result.setDescription(isLine
+                ? String.format("L-7 (LINE): E=%.1f NM, Lb=%.1f NM, L=%.1f NM, Ro=%.2f NM, Ao=%.1f NM², Co=%.3f",
+                        E, Lb, L, Ro, Ao, Co)
+                : String.format("L-7: E=%.1f NM, Ro=%.2f NM, Ao=%.1f NM², Co=%.3f, dd=%.1f NM",
+                        E, Ro, Ao, Co, dd));
         return result;
     }
 
