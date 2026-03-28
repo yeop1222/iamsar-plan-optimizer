@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 80
   error:
     include-stacktrace: never
     include-message: always
@@ -9,7 +9,3 @@ spring:
     cache: false
     prefix: classpath:/templates/
     suffix: .html
-
-logging:
-  level:
-    papervalidation: DEBUG
